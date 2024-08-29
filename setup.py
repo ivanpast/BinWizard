@@ -1,14 +1,14 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="interactive_binning",
+    name="BinWizard",
     version="0.1",
     author="Ivan Pastor",
     author_email="ivanpastorsanz@gmail.com",
     description="A package for interactive binning and statistical analysis in Streamlit.",
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
-    url="https://github.com/ivanpast/binanalyser",  # Replace with your GitHub repo
+    url="https://github.com/ivanpast/BinWizard",  # Replace with your GitHub repo
     packages=find_packages(),
     install_requires=[
         "streamlit",

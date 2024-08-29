@@ -1,4 +1,4 @@
-# Interactive Binning
+# BinWizard
 
 This package provides an interactive binning tool using Streamlit for statistical analysis.
 
@@ -7,4 +7,4 @@ This package provides an interactive binning tool using Streamlit for statistica
 You can install this package using pip:
 
 ```bash
-pip install git+https://github.com/ivanpast/binanalyser.git
+pip install git+https://github.com/ivanpast/BinWizard.git
