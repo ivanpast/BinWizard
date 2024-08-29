@@ -1,29 +1,23 @@
+
 from setuptools import setup, find_packages
 
 setup(
-    name="BinWizard",
+    name="my_bin_optimizer",
     version="0.1",
-    author="Ivan Pastor",
-    author_email="ivanpastorsanz@gmail.com",
-    description="A package for interactive binning and statistical analysis in Streamlit.",
-    long_description=open('README.md').read(),
-    long_description_content_type='text/markdown',
-    url="https://github.com/ivanpast/BinWizard",  # Replace with your GitHub repo
     packages=find_packages(),
     install_requires=[
-        "streamlit",
-        "pandas",
-        "numpy",
-        "optbinning",
-        "scipy",
-        "matplotlib",
-        "seaborn",
-        "xlsxwriter",
+        "streamlit",  # Incluye otras dependencias necesarias
     ],
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
-        "Operating System :: OS Independent",
-    ],
-    python_requires='>=3.7',
+    entry_points={
+        'console_scripts': [
+            'bin-binary-target=scripts.run_bin_binary:main',
+            'bin-continuous-target=scripts.run_bin_continuous:main',
+        ],
+    },
+    author="Iván Pastor",
+    author_email="ivanpastorsanz@gmail.com",
+    description="Paquete para optimizar binnings de variables continuas con target dicotómico o continuo",
+    long_description=open('README.md').read(),
+    long_description_content_type="text/markdown",
+    url="https://github.com/ivanpast/BinWizard",  # Cambia esto si tienes un repositorio
 )
