@@ -2,16 +2,16 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="my_bin_optimizer",
+    name="BinWizard",
     version="0.1",
     packages=find_packages(),
     install_requires=[
         "streamlit",  # Incluye otras dependencias necesarias
     ],
-    entry_points={
+entry_points={
         'console_scripts': [
-            'bin-binary-target=scripts.run_bin_binary:main',
-            'bin-continuous-target=scripts.run_bin_continuous:main',
+            'binGUI=BinWizard.bin_target_launcher:binGUI',
+            'contGUI=BinWizard.cont_target_launcher:contGUI',
         ],
     },
     author="Iván Pastor",
