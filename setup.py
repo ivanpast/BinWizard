@@ -6,9 +6,12 @@ setup(
     version="0.1",
     packages=find_packages(),
     install_requires=[
-        "streamlit",  # Incluye otras dependencias necesarias
+        "streamlit",
     ],
-entry_points={
+    package_data={
+        'BinWizard': ['continuous_target.py', 'binary_target.py'],
+    },
+    entry_points={
         'console_scripts': [
             'binGUI=BinWizard.bin_target_launcher:binGUI',
             'contGUI=BinWizard.cont_target_launcher:contGUI',
@@ -19,5 +22,5 @@ entry_points={
     description="Paquete para optimizar binnings de variables continuas con target dicotómico o continuo",
     long_description=open('README.md').read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/ivanpast/BinWizard",  # Cambia esto si tienes un repositorio
+    url="https://github.com/ivanpast/BinWizard",
 )
