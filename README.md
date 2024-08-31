@@ -2,6 +2,9 @@
 
 This repository contains a Python-based interactive binning tool built using Streamlit, which allows users to upload a dataset, perform optimal binning on a selected numerical variable against a target variable, and analyze the results interactively. The tool supports continuous target variables and provides functionality for automatic and manual binning, as well as the calculation of key metrics like Somers' D and the Herfindahl-Hirschman Index (HHI).
 
+it is mainly based on the OptBinning packaged developed by Guillermo Navas Palencia (https://github.com/guillermo-navas-palencia/optbinning). This package attempts to create a tool for manually change potential 
+bins of variables as it is usually done in many machine learning applications. 
+
 
 ### Installation
 
