@@ -2,22 +2,19 @@ from io import BytesIO
 import streamlit as st
 import pandas as pd
 import numpy as np
-from optbinning import OptimalBinning
+from optbinning import ContinuousOptimalBinning
 from scipy import stats
 from scipy.stats import somersd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import itertools
-
 
 def generate_excel(df, filename="binning_results.xlsx"):
-    """Generates an Excel file with the sample data and assigned bins."""
+    """Generates an Excel file with the sample data and the assigned bins."""
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='Binning Results')
     processed_data = output.getvalue()
     return processed_data
-
 
 def download_button(data, filename, label):
     """Creates a button to download the data as an Excel file."""
@@ -27,7 +24,6 @@ def download_button(data, filename, label):
         file_name=filename,
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
-
 
 def interactive_binning(df):
     st.title("Interactive Binning")
@@ -39,39 +35,33 @@ def interactive_binning(df):
         return
 
     continuous_var = st.selectbox("Select numerical variable for binning", numeric_columns)
-    target_var = st.selectbox("Select target variable", df.columns)
+    target_var = st.selectbox("Select target variable", numeric_columns)  # Now only allows numeric variables
 
     # Binning configuration
     max_n_bins = st.slider("Maximum number of bins", 2, 20, 10)
     min_bin_size = st.slider("Minimum bin size (%)", 0.0, 20.0, 5.0) / 100
     monotonic_trend = st.selectbox("Monotonic trend", ["auto", "ascending", "descending", "convex", "concave", "none"])
 
-    # Perform initial binning
-    optb = OptimalBinning(name=continuous_var,
-                          dtype="numerical",
-                          solver="cp",
-                          max_n_bins=max_n_bins,
-                          min_bin_size=min_bin_size,
-                          monotonic_trend=monotonic_trend)
+    # Perform initial binning for the continuous variable with the continuous target
+    optb = ContinuousOptimalBinning(name=continuous_var,
+                                    max_n_bins=max_n_bins,
+                                    min_bin_size=min_bin_size,
+                                    monotonic_trend=monotonic_trend)
 
     optb.fit(df[continuous_var], df[target_var])
 
     # Validate and clean the splits
     valid_splits = validate_splits(optb.splits)
 
-    # Calculate HHI and Somers' D for automatic splits
+    # Calculate the metrics using ContinuousOptimalBinning
     table = optb.binning_table.build()
     table = table[~table['Bin'].isin(['Special', 'Missing'])]
     table['Bin'] = table['Bin'].apply(lambda x: str(x))
-    hhi_value = calculate_herfindahl(table)
 
-    if valid_splits is not None and len(valid_splits) > 0:
-        somers_d_value = calculate_somersd(df, continuous_var, target_var, valid_splits)
-    else:
-        somers_d_value = np.nan
-        st.warning("No valid splits found. Somers' D could not be calculated.")
+    # Calculate Somers' D manually
+    somers_d_value = calculate_somersd(df, continuous_var, target_var, valid_splits)
 
-    # Display the table with bins, HHI, and automatic Somers' D
+    # Display the table with the bins and Somers' D
     st.subheader("Binning Results (Automatic)")
     st.write(table)
 
@@ -79,15 +69,13 @@ def interactive_binning(df):
     excel_data = generate_excel(df)
     download_button(excel_data, "binning_results.xlsx", "Download full sample with bins")
 
-    st.subheader("HHI and Somers' D (Automatic)")
-    hhi_value = calculate_herfindahl(table)["HI"]
-    st.write(f"Herfindahl-Hirschman Index (HHI): {hhi_value:.4f}")
+    st.subheader("Somers' D (Automatic)")
     st.write(f"Somers' D: {somers_d_value:.4f}")
 
-    # Visualization of violin plots with p-values for automatic splits
+    # Visualization of violin plots with p-values for the automatic splits
     if valid_splits is not None and len(valid_splits) > 0:
         df['bin'] = pd.cut(df[continuous_var], bins=valid_splits, include_lowest=True)
-        plot_violinplots_with_pvalues_matrix(df, continuous_var, target_var)
+        plot_violinplots_with_pvalues(df, continuous_var, target_var)
 
     # Manual split selection and combination
     st.subheader("Manual Split Combination")
@@ -100,77 +88,20 @@ def interactive_binning(df):
             combined_splits = combine_splits(valid_splits, selected_splits)
             st.write(f"New Combined Splits: {combined_splits[1:-1]}")
 
-            # Apply combined splits to the data
+            # Apply the combined splits to the data
             df['bin'] = pd.cut(df[continuous_var], bins=combined_splits, include_lowest=True)
 
-            # Calculate and display the new result table
-            new_table = calculate_metrics(df, continuous_var, target_var, combined_splits)
+            # Calculate and display the new result table with metrics similar to optbinning
+            new_table = calculate_metrics_continuous(df, continuous_var, target_var, combined_splits)
             st.subheader("Updated Binning Results (Manual)")
             st.write(new_table)
 
-            # Visualize distribution with the new splits
-            plot_violinplots_with_pvalues_matrix(df, continuous_var, target_var)
+            # Visualize the distribution with the new splits
+            plot_violinplots_with_pvalues(df, continuous_var, target_var)
 
-            # Button to download the updated sample with assigned bins
+            # Button to download the updated sample with the new assigned bins
             excel_data = generate_excel(df)
             download_button(excel_data, "updated_binning_results.xlsx", "Download updated sample with bins")
-
-    # Manual split creation section
-    st.subheader("Manual Split Creation")
-
-    manual_splits_input = st.text_input("Enter manual splits separated by commas (e.g., 0.1, 0.5, 0.9)")
-    if manual_splits_input:
-        try:
-            # Convert input to a sorted list of floats
-            manual_splits = sorted([float(x.strip()) for x in manual_splits_input.split(',')])
-            manual_splits = [-np.inf] + manual_splits + [np.inf]
-            st.write(f"Using manual splits: {manual_splits[1:-1]}")
-
-            # Apply manual splits to the data
-            df['bin'] = pd.cut(df[continuous_var], bins=manual_splits, include_lowest=True)
-
-            # Calculate and display the result table
-            manual_table = calculate_metrics(df, continuous_var, target_var, manual_splits)
-            st.subheader("Manual Binning Results")
-            st.write(manual_table)
-
-            # Visualize distribution with the manual splits
-            plot_violinplots_with_pvalues_matrix(df, continuous_var, target_var)
-
-            # Button to download the manually binned sample
-            excel_data = generate_excel(df)
-            download_button(excel_data, "manual_binning_results.xlsx", "Download manually binned sample with bins")
-
-        except ValueError:
-            st.error("Invalid input for manual splits. Please enter numbers separated by commas.")
-
-def plot_violinplots_with_pvalues_matrix(df, continuous_var, target_var):
-    # Filter out invalid bins
-    df = df[df['bin_code'] != -1]
-
-    # Ensure bins are ordered correctly
-    bins = df['bin'].cat.categories
-    df['bin'] = pd.Categorical(df['bin'], categories=bins, ordered=True)
-
-    # Create an empty matrix to store p-values
-    p_values_matrix = np.full((len(bins), len(bins)), np.nan)
-
-    # Calculate p-values for all pairs of bins
-    for i, j in itertools.combinations(range(len(bins)), 2):
-        bin1_data = df[df['bin'] == bins[i]][target_var]
-        bin2_data = df[df['bin'] == bins[j]][target_var]
-        if len(bin1_data) > 0 and len(bin2_data) > 0:
-            _, p_value = stats.ranksums(bin1_data, bin2_data)
-            p_values_matrix[i, j] = p_value
-            p_values_matrix[j, i] = p_value  # Symmetric matrix
-
-    # Convert the p-values matrix into a DataFrame for better display
-    p_values_df = pd.DataFrame(p_values_matrix, index=bins, columns=bins)
-
-    # Display the matrix using Streamlit
-    st.subheader("P-Value Matrix for Wilcoxon Rank-Sum Test Between Bins")
-    st.dataframe(p_values_df.style.format(precision=4))
-
 
 def validate_splits(splits):
     """Validates and cleans the splits by removing duplicates and NaN."""
@@ -181,9 +112,8 @@ def validate_splits(splits):
         return []
     return [-np.inf] + splits.tolist() + [np.inf]
 
-
 def combine_splits(splits, selected_splits):
-    """Combines all splits except the selected ones."""
+    """Combines all splits, except the selected ones."""
     new_splits = [-np.inf]  # Always include the lower bound
 
     for split in splits[1:-1]:  # Ignore the first and last (infinities)
@@ -193,46 +123,37 @@ def combine_splits(splits, selected_splits):
     new_splits.append(np.inf)  # Always include the upper bound
     return np.unique(new_splits)
 
-
-def calculate_metrics(df, continuous_var, target_var, splits):
-    """Calculates HHI, Somers' D, and returns a table with results, including labels for the new bins."""
-    # Create labeled bins
+def calculate_metrics_continuous(df, continuous_var, target_var, splits):
+    """Calculates metrics equivalent to those of ContinuousOptimalBinning for a continuous target."""
     df['bin'] = pd.cut(df[continuous_var], bins=splits, include_lowest=True)
-    df = df.dropna(subset=['bin'])
-    df['bin_code'] = pd.Categorical(df['bin']).codes
-    df = df[df['bin_code'] != -1]
-    df = df.sort_values(by='bin_code')
     labels = [f"({bin.left:.2f}, {bin.right:.2f}]" for bin in df['bin'].cat.categories]
     df['bin_label'] = pd.cut(df[continuous_var], bins=splits, include_lowest=True, labels=labels)
 
-    # Group by the labeled bins
+    # Calculate the mean and variance of the target within each bin
     table = df.groupby('bin_label').agg(
         Count=('bin_label', 'size'),
-        Non_event=(target_var, lambda x: (x == 0).sum()),
-        Event=(target_var, lambda x: (x == 1).sum())
+        Mean_Target=(target_var, 'mean'),
+        Var_Target=(target_var, 'var')
     )
-    table['Event rate'] = table['Event'] / table['Count']
-    table['WoE'] = np.log((table['Event'] / table['Event'].sum()) / (table['Non_event'] / table['Non_event'].sum()))
-    table['IV'] = (table['Event'] / table['Event'].sum() - table['Non_event'] / table['Non_event'].sum()) * table['WoE']
 
-    # Calculate HHI using the new calculate_herfindahl function
+    # Calculate the HHI using the new calculate_herfindahl function
     hhi_result = calculate_herfindahl(table)
     table['HHI'] = hhi_result["HI"]  # Use HI_trad or HI as required
+
+    # Calculate Somers' D manually
     somers_d_value = calculate_somersd(df, continuous_var, target_var, splits)
     table['SomersD'] = somers_d_value
-    table['IV'] = table['IV'].sum()
 
     # Reset the index to display the bin labels clearly
     table = table.reset_index()
 
     return table
 
-
 def calculate_herfindahl(table):
     counts = table['Count']
     total = counts.sum()
 
-    # Calculate frequencies
+    # Calculate the frequencies
     concentration = counts.value_counts().reset_index()
     concentration.columns = ['HRC', 'Nobs']
     concentration['freq'] = concentration['Nobs'] / total
@@ -261,15 +182,45 @@ def calculate_herfindahl(table):
         "table": concentration
     }
 
-
 def calculate_somersd(df, continuous_var, target_var, splits):
     df['bin'] = pd.cut(df[continuous_var], bins=splits, include_lowest=True)
     df['bin_code'] = pd.Categorical(df['bin']).codes
-    df = df[df['bin_code'] != -1]
-    df = df.sort_values(by='bin_code')
-    somers_d_result = somersd(df[target_var], df['bin_code'])
-    return somers_d_result.statistic  # Access the Somers' D value
+    somers_d_result = somersd(df['bin_code'], df[target_var])
+    return somers_d_result.statistic  # Access the value of Somers' D
 
+def plot_violinplots_with_pvalues(df, continuous_var, target_var):
+    bins = df['bin'].cat.categories
+    p_values = []
+
+    for i in range(len(bins) - 1):
+        bin1_data = df[df['bin'] == bins[i]][target_var]
+        bin2_data = df[df['bin'] == bins[i + 1]][target_var]
+        if len(bin1_data) > 0 and len(bin2_data) > 0:
+            # Apply the Wilcoxon Rank-Sum test (Mann-Whitney U)
+            stat, p_value = stats.ranksums(bin1_data, bin2_data)
+            p_values.append(p_value)
+        else:
+            p_values.append(np.nan)
+
+    # Create the violin plot
+    fig, ax = plt.subplots(figsize=(6, 2))
+    sns.violinplot(x='bin', y=continuous_var, data=df, ax=ax, inner='quartile', palette='muted')
+
+    # Add p-values between adjacent bins
+    for i, p_value in enumerate(p_values):
+        x1, x2 = i, i + 1
+        y, h, col = df[continuous_var].max() + df[continuous_var].std() / 2, df[continuous_var].std() / 10, 'k'
+        ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], lw=1.5, c=col)
+        formatted_p_value = f"p={p_value:.4f}"  # Round to 4 decimal places
+        ax.text((x1 + x2) * 0.5, y + h, formatted_p_value, ha='center', va='bottom', color=col, fontsize=8)
+
+    ax.set_title(f"Violin Plots of {continuous_var} with Wilcoxon p-values", fontsize=8)
+    ax.set_xlabel("Bins", fontsize=8)
+    ax.set_ylabel(continuous_var, fontsize=8)
+    sns.despine()
+
+    plt.xticks(rotation=30, ha='right', fontsize=5)  # Rotate x labels if necessary
+    st.pyplot(fig)
 
 def main():
     st.set_page_config(layout="wide")
@@ -292,7 +243,6 @@ def main():
         interactive_binning(df)
     else:
         st.write("Please upload a CSV, Excel, or SAS file to begin.")
-
 
 if __name__ == "__main__":
     main()
